@@ -1,0 +1,45 @@
+name: Add Indicators
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  indicators:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install pandas
+
+      - name: Add indicators
+        run: python add_indicators.py
+
+      - name: Commit and push indicators
+        run: |
+          set -e
+
+          git config user.name "github-actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/eurusd_5m_indicators.csv || true
+          git diff --staged --quiet || git commit -m "Auto-update indicators (EURUSD 5m)"
+
+          git pull --rebase origin main || exit 0
+          git push origin main
