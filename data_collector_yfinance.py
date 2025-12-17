@@ -12,7 +12,7 @@ print("Downloading EURUSD 5m data...")
 df = yf.download(
     "EURUSD=X",
     interval="5m",
-    period="1d",
+    period="1wk",
     progress=False
 )
 
