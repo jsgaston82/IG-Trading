@@ -12,10 +12,6 @@ headers = None
 
 
 def login():
-    """
-    Login to IG and store session headers (CST + X-SECURITY-TOKEN)
-    Works both locally and in GitHub Actions (case-insensitive headers)
-    """
     global headers
 
     response = session.post(
@@ -34,10 +30,7 @@ def login():
         raise Exception(f"IG login failed: {response.text}")
 
     cst = response.headers.get("CST") or response.headers.get("cst")
-    token = (
-        response.headers.get("X-SECURITY-TOKEN")
-        or response.headers.get("x-security-token")
-    )
+    token = response.headers.get("X-SECURITY-TOKEN") or response.headers.get("x-security-token")
 
     if not cst or not token:
         raise Exception(f"Missing IG auth headers: {dict(response.headers)}")
@@ -57,18 +50,17 @@ def ensure_login():
 
 def get_positions():
     ensure_login()
-    r = session.get(f"{BASE}/positions", headers=headers)
-    return r.json()
+    return session.get(f"{BASE}/positions", headers=headers).json()
 
 
-def has_position(epic: str) -> bool:
+def has_position(epic):
     positions = get_positions().get("positions", [])
     return any(p["market"]["epic"] == epic for p in positions)
 
 
-def open_trade(epic: str, direction: str, size: float):
+def open_trade(epic, direction, size):
     ensure_login()
-    r = session.post(
+    return session.post(
         f"{BASE}/positions/otc",
         headers=headers,
         json={
@@ -78,17 +70,14 @@ def open_trade(epic: str, direction: str, size: float):
             "orderType": "MARKET",
             "forceOpen": True,
         },
-    )
-    return r.json()
+    ).json()
 
 
-def close_trade(deal_id: str):
+def close_trade(deal_id):
     ensure_login()
-    r = session.request(
+    return session.request(
         "DELETE",
         f"{BASE}/positions/otc",
         headers=headers,
         json={"dealId": deal_id},
-    )
-    return r.json()
-
+    ).json()
