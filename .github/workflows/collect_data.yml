@@ -33,7 +33,7 @@ jobs:
       - name: Collect EURUSD data
         run: python data_collector_yfinance.py
 
-      - name: Commit and push data (safe: pull --rebase first)
+      - name: Commit and push data #(safe: pull --rebase first)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
