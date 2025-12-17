@@ -1,0 +1,29 @@
+name: Decision Engine
+
+on:
+  workflow_run:
+    workflows:
+      - Predict LSTM Expectation (4H)
+      - Detect Trend (EMA)
+      - Entry Signal (RSI + Trend)
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run decision engine
+        run: python scripts/decision_engine.py
+
+      - name: Commit decision
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add results/decision.json
+          git commit -m "Update trade decision" || echo "No changes"
+          git push
