@@ -22,7 +22,7 @@ jobs:
           pip install pandas numpy torch joblib
 
       - name: Run LSTM prediction
-        run: python scripts/predict_lstm_expectation.py
+        run: python predict_lstm_expectation.py
 
       - name: Commit results
         run: |
