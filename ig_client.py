@@ -7,6 +7,9 @@ API_KEY = os.environ["API_KEY"]
 U = os.environ["USUARIO"]
 P = os.environ["PASSWORD"]
 
+print("USUARIO:", repr(U))
+
+
 s = requests.Session()
 HEADERS = {}
 
