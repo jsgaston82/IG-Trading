@@ -32,7 +32,6 @@ def login():
     if r.status_code != 200:
         raise Exception(f"IG login failed: {r.status_code} {r.text}")
 
-    # IG sometimes returns lowercase headers
     headers = {k.lower(): v for k, v in r.headers.items()}
 
     cst = headers.get("cst")
@@ -58,20 +57,19 @@ def ensure_login():
 
 def get_positions():
     ensure_login()
-    r = session.get(f"{BASE}/positions", headers=HEADERS, timeout=10)
+    r = session.get(f"{BASE}/positions", headers=HEADERS)
     r.raise_for_status()
     return r.json()
 
 
-def has_position(epic: str) -> bool:
-    data = get_positions()
-    for p in data.get("positions", []):
-        if p["market"]["epic"] == epic:
-            return True
-    return False
+def has_position(epic):
+    return any(
+        p["market"]["epic"] == epic
+        for p in get_positions().get("positions", [])
+    )
 
 
-def open_trade(epic: str, direction: str, size: float):
+def open_trade(epic, direction, size):
     ensure_login()
     r = session.post(
         f"{BASE}/positions/otc",
@@ -83,19 +81,17 @@ def open_trade(epic: str, direction: str, size: float):
             "orderType": "MARKET",
             "forceOpen": True,
         },
-        timeout=10,
     )
     r.raise_for_status()
     return r.json()
 
 
-def close_trade(deal_id: str):
+def close_trade(deal_id):
     ensure_login()
     r = session.delete(
         f"{BASE}/positions/otc",
         headers=HEADERS,
         json={"dealId": deal_id},
-        timeout=10,
     )
     r.raise_for_status()
     return r.json()
