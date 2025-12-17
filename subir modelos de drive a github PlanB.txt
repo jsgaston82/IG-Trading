@@ -6,7 +6,7 @@
 const GITHUB_CONFIG = {
   // Obtén tu token en: https://github.com/settings/tokens
   // Permisos necesarios: repo (todos)
-  //GITHUB_TOKEN: '',
+  GITHUB_TOKEN: '',
   
   // Tu usuario y repositorio
   GITHUB_USER: 'jsgaston82',
