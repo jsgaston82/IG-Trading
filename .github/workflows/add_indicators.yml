@@ -1,9 +1,9 @@
 name: Add Indicators
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"   # cada 10 minutos
 
 permissions:
   contents: write
@@ -26,7 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas
+          pip install pandas numpy
 
       - name: Add indicators
         run: python add_indicators.py
@@ -34,12 +34,11 @@ jobs:
       - name: Commit and push indicators
         run: |
           set -e
-
           git config user.name "github-actions"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add data/eurusd_5m_indicators.csv || true
-          git diff --staged --quiet || git commit -m "Auto-update indicators (EURUSD 5m)"
+          git diff --staged --quiet || git commit -m "Update indicators (EMA + RSI)"
 
           git pull --rebase origin main || exit 0
           git push origin main
