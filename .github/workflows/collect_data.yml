@@ -5,28 +5,62 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+# Asegura permiso de escritura (opcional local si repo configura por defecto)
+permissions:
+  contents: write
+
 jobs:
   collect:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo (with credentials)
+        uses: actions/checkout@v4
         with:
+          # permite usar GITHUB_TOKEN para push
           persist-credentials: true
+          # fetch full history to allow proper rebase/pull
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
-      - run: pip install requests pandas
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas
 
       - name: Collect EURUSD data
-        run: python collect_data.py
+        run: python data_collector_yfinance.py
 
-      - name: Commit data
+      - name: Commit and push data (safe: pull --rebase first)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add data/
-          git commit -m "update EURUSD 5m data" || echo "No changes"
-          git push
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Añade cambios si los hay
+          git add data/eurusd_5m.csv || true
+          git diff --staged --quiet || git commit -m "Auto-update EURUSD 5m data"
+
+          # Integra cambios remotos con rebase (evita merges automáticos)
+          # Si falla el rebase, abortamos y no forzamos push para no romper main
+          echo "Integrating remote changes..."
+          if git fetch origin main && git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git pull --rebase origin main || {
+              echo "Rebase failed — aborting push to avoid conflicts"
+              git rebase --abort || true
+              exit 0
+            }
+          fi
+
+          # Si ahora hay cambios locales, push; si no, no hace nada
+          if git diff --staged --quiet && git diff --quiet; then
+            echo "No local changes to push."
+          else
+            echo "Pushing changes..."
+            git push origin main
+          fi
