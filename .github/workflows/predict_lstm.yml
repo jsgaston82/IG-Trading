@@ -19,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas numpy torch joblib
+          pip install pandas numpy torch joblib scikit-learn
 
       - name: Run LSTM prediction
         run: python predict_lstm_expectation.py
