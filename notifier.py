@@ -1,15 +1,9 @@
 
-import os
-import requests
-
+import os, requests
 def send(msg):
-    token = os.environ.get("TELEGRAM_TOKEN")
-    chat = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat:
+    t=os.environ.get("TELEGRAM_TOKEN")
+    c=os.environ.get("TELEGRAM_CHAT_ID")
+    if t and c:
+        requests.post(f"https://api.telegram.org/bot{t}/sendMessage",data={"chat_id":c,"text":msg})
+    else:
         print(msg)
-        return
-    requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data={"chat_id": chat, "text": msg},
-        timeout=10,
-    )
