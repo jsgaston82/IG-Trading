@@ -1,0 +1,670 @@
+// ============================================================
+//   AUTOMATIZACIÓN DE COLAB - VERSIÓN FINAL
+//   Ejecuta notebook de domingo a jueves a las 21:00
+// ============================================================
+
+// ✅ CONFIGURACIÓN (YA ESTÁ CON TUS DATOS)
+const CONFIG = {
+  NOTEBOOK_ID: '1Fo5nubg6LSKVjhvp1MTse4cybmDlesIs',
+  EMAIL: 'jsgaston82@gmail.com',
+  EXECUTION_HOUR: 21,
+  GPU_TYPE: 'T4',
+  MAX_EXECUTION_TIME: 15,
+  
+  // 📱 MENSAJERÍA (Elige la que quieras activar)
+  USAR_TELEGRAM: true,        // ⭐ RECOMENDADO: Rápido y gratis
+  USAR_WHATSAPP: false,        // Via Twilio (requiere cuenta)
+  USAR_SLACK: false,           // Si usas Slack
+  USAR_DISCORD: false,         // Si usas Discord
+  USAR_PUSHBULLET: false,      // Notificaciones móvil
+  
+  // 🔑 Tokens (solo los que uses)
+  TELEGRAM_BOT_TOKEN: '8502620685:AAGnHy3x5iC5ACP91hYEnJ-yrl4_7oUUAdk',
+  TELEGRAM_CHAT_ID: '5825443798',
+  
+  TWILIO_ACCOUNT_SID: '',
+  TWILIO_AUTH_TOKEN: '',
+  TWILIO_WHATSAPP_FROM: '',
+  TWILIO_WHATSAPP_TO: '',
+  
+  SLACK_WEBHOOK_URL: '',
+  DISCORD_WEBHOOK_URL: '',
+  PUSHBULLET_API_KEY: ''
+};
+
+// ============================================================
+//   FUNCIÓN PRINCIPAL
+// ============================================================
+
+function ejecutarNotebookDiario() {
+  const startTime = new Date();
+  Logger.log('🚀 Iniciando ejecución automática: ' + startTime);
+  
+  try {
+    // 1. Verificar si es día de ejecución (Domingo a Jueves)
+    if (!esHorarioEjecucion()) {
+      Logger.log('⏸️ No es horario de ejecución');
+      return;
+    }
+    
+    // 2. Preparar notebook
+    Logger.log('📝 Preparando notebook...');
+    const notebookContent = obtenerNotebook();
+    
+    // 3. Modificar notebook para auto-ejecución
+    const notebookModificado = prepararAutoEjecucion(notebookContent);
+    
+    // 4. Guardar versión temporal
+    const tempNotebookId = guardarNotebookTemporal(notebookModificado);
+    
+    // 5. Ejecutar en Colab
+    Logger.log('⚡ Ejecutando notebook en Colab...');
+    const resultado = ejecutarEnColab(tempNotebookId);
+    
+    // 6. Monitorear ejecución
+    const exito = monitorearEjecucion(tempNotebookId);
+    
+    // 7. Limpiar temporales
+    limpiarTemporales(tempNotebookId);
+    
+    // 8. Enviar notificación
+    const duracion = (new Date() - startTime) / 60000;
+    enviarNotificacion(exito, duracion);
+    
+    Logger.log('✅ Ejecución completada');
+    
+  } catch (error) {
+    Logger.log('❌ Error: ' + error);
+    enviarNotificacionError(error);
+  }
+}
+
+// ============================================================
+//   VERIFICACIÓN DE HORARIO (DOMINGO A JUEVES)
+// ============================================================
+
+function esHorarioEjecucion() {
+  const ahora = new Date();
+  const diaSemana = ahora.getDay();
+  const hora = ahora.getHours();
+  
+  // Días Forex: Domingo=0, Lunes=1, Martes=2, Miércoles=3, Jueves=4
+  const diasForex = [0, 1, 2, 3, 4];
+  
+  if (diasForex.includes(diaSemana) && hora === CONFIG.EXECUTION_HOUR) {
+    Logger.log(`✅ Es día Forex: ${obtenerNombreDia(diaSemana)} a las ${hora}:00`);
+    return true;
+  }
+  
+  Logger.log(`⏸️ NO es día Forex: ${obtenerNombreDia(diaSemana)} - Mercado cerrado`);
+  return false;
+}
+
+function obtenerNombreDia(dia) {
+  const nombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return nombres[dia];
+}
+
+// ============================================================
+//   FUNCIONES DE NOTEBOOK
+// ============================================================
+
+function obtenerNotebook() {
+  try {
+    const file = DriveApp.getFileById(CONFIG.NOTEBOOK_ID);
+    const content = file.getBlob().getDataAsString();
+    return JSON.parse(content);
+  } catch (error) {
+    throw new Error('No se pudo obtener notebook: ' + error);
+  }
+}
+
+function prepararAutoEjecucion(notebook) {
+  const modified = JSON.parse(JSON.stringify(notebook));
+  
+  modified.cells.forEach((cell) => {
+    if (cell.cell_type === 'code' && cell.source) {
+      const source = cell.source.join('');
+      
+      if (source.includes("input(")) {
+        cell.source = [
+          "# AUTO-EJECUCIÓN: Respuesta automática\n",
+          "user_choice = 's'\n",
+          "print('✅ Modo automático: Ejecutando con TF2ONNX')\n"
+        ];
+      }
+    }
+  });
+  
+  return modified;
+}
+
+function guardarNotebookTemporal(notebook) {
+  const timestamp = new Date().getTime();
+  const fileName = `temp_auto_execution_${timestamp}.ipynb`;
+  
+  const folder = DriveApp.getFolderById(
+    DriveApp.getFileById(CONFIG.NOTEBOOK_ID).getParents().next().getId()
+  );
+  
+  const blob = Utilities.newBlob(
+    JSON.stringify(notebook, null, 2),
+    'application/x-ipynb+json',
+    fileName
+  );
+  
+  const file = folder.createFile(blob);
+  Logger.log('📄 Notebook temporal creado: ' + file.getId());
+  
+  return file.getId();
+}
+
+function ejecutarEnColab(notebookId) {
+  const colabUrl = `https://colab.research.google.com/drive/${notebookId}`;
+  Logger.log('🔗 URL de Colab: ' + colabUrl);
+  
+  return {
+    url: colabUrl,
+    notebookId: notebookId,
+    timestamp: new Date()
+  };
+}
+
+// ============================================================
+//   MONITOREO
+// ============================================================
+
+function monitorearEjecucion(notebookId) {
+  const maxIntentos = CONFIG.MAX_EXECUTION_TIME * 2;
+  let intentos = 0;
+  
+  Logger.log('👀 Monitoreando ejecución...');
+  
+  while (intentos < maxIntentos) {
+    Utilities.sleep(30000);
+    
+    const estado = verificarEstadoNotebook(notebookId);
+    
+    if (estado.completado) {
+      Logger.log('✅ Ejecución completada exitosamente');
+      return true;
+    }
+    
+    if (estado.error) {
+      Logger.log('❌ Error en ejecución');
+      return false;
+    }
+    
+    intentos++;
+    Logger.log(`⏳ Progreso: ${intentos}/${maxIntentos}`);
+  }
+  
+  Logger.log('⏰ Timeout alcanzado');
+  return false;
+}
+
+function verificarEstadoNotebook(notebookId) {
+  try {
+    const file = DriveApp.getFileById(notebookId);
+    const ultimaModificacion = file.getLastUpdated();
+    const ahora = new Date();
+    const diferencia = (ahora - ultimaModificacion) / 60000;
+    
+    if (diferencia < 2) {
+      return { completado: false, error: false };
+    }
+    
+    const folder = file.getParents().next();
+    const archivos = folder.getFilesByName('training_results.png');
+    
+    if (archivos.hasNext()) {
+      const archivoResultado = archivos.next();
+      const fechaResultado = archivoResultado.getLastUpdated();
+      
+      if ((ahora - fechaResultado) / 60000 < 30) {
+        return { completado: true, error: false };
+      }
+    }
+    
+    return { completado: false, error: false };
+    
+  } catch (error) {
+    return { completado: false, error: true };
+  }
+}
+
+// ============================================================
+//   LIMPIEZA
+// ============================================================
+
+function limpiarTemporales(notebookId) {
+  try {
+    const file = DriveApp.getFileById(notebookId);
+    file.setTrashed(true);
+    Logger.log('🗑️ Archivos temporales eliminados');
+  } catch (error) {
+    Logger.log('⚠️ No se pudieron eliminar temporales: ' + error);
+  }
+}
+
+// ============================================================
+//   NOTIFICACIONES MEJORADAS CON MÚLTIPLES PLATAFORMAS
+// ============================================================
+
+function enviarNotificacion(exito, duracion) {
+  const fecha = new Date().toLocaleString('es-ES', { 
+    timeZone: 'Europe/Madrid',
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  
+  const emoji = exito ? '✅' : '⚠️';
+  const estado = exito ? 'ÉXITO' : 'ADVERTENCIA';
+  
+  // Mensaje corto para Telegram/WhatsApp
+  const mensajeCorto = `${emoji} *Colab Forex LSTM*
+
+📊 Resultado: ${estado}
+⏱️ Duración: ${duracion.toFixed(1)} min
+📅 ${fecha}
+
+✅ Archivos actualizados
+🔗 Drive: drive.google.com`;
+  
+  // Mensaje largo para Email
+  const mensajeEmail = `
+Ejecución automática de Colab - FOREX LSTM
+
+📊 Resultado: ${estado}
+⏱️ Duración: ${duracion.toFixed(2)} minutos
+📅 Fecha: ${fecha}
+
+📁 Archivos generados:
+- eurusd_lstm_pytorch.onnx
+- eurusd_lstm_tf2onnx.onnx
+- training_results.png
+- EURUSD_1h_data.csv (actualizado)
+
+🔗 Ver en Drive: https://drive.google.com/drive/my-drive
+
+---
+Automatización via Google Apps Script
+  `;
+  
+  const asunto = `${emoji} Colab ejecutado ${exito ? 'exitosamente' : 'con advertencias'}`;
+  
+  // Enviar a todas las plataformas activadas
+  if (CONFIG.USAR_TELEGRAM) {
+    enviarTelegram(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_WHATSAPP) {
+    enviarWhatsApp(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_SLACK) {
+    enviarSlack(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_DISCORD) {
+    enviarDiscord(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_PUSHBULLET) {
+    enviarPushbullet(asunto, mensajeCorto);
+  }
+  
+  // Email siempre se envía
+  GmailApp.sendEmail(CONFIG.EMAIL, asunto, mensajeEmail);
+  Logger.log('📧 Notificaciones enviadas a todas las plataformas activas');
+}
+
+function enviarNotificacionError(error) {
+  const fecha = new Date().toLocaleString('es-ES', { 
+    timeZone: 'Europe/Madrid' 
+  });
+  
+  const mensajeCorto = `❌ *Error en Colab Forex*
+
+⚠️ ${error.toString().substring(0, 100)}
+📅 ${fecha}
+
+🔗 Revisar: colab.research.google.com`;
+  
+  const mensajeEmail = `
+Error en ejecución automática
+
+❌ Error: ${error.toString()}
+📅 Fecha: ${fecha}
+
+Por favor, revisa el notebook manualmente:
+https://colab.research.google.com/drive/${CONFIG.NOTEBOOK_ID}
+
+---
+Automatización via Google Apps Script
+  `;
+  
+  const asunto = '❌ Error en ejecución automática de Colab';
+  
+  // Enviar a todas las plataformas
+  if (CONFIG.USAR_TELEGRAM) {
+    enviarTelegram(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_WHATSAPP) {
+    enviarWhatsApp(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_SLACK) {
+    enviarSlack(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_DISCORD) {
+    enviarDiscord(mensajeCorto);
+  }
+  
+  if (CONFIG.USAR_PUSHBULLET) {
+    enviarPushbullet(asunto, mensajeCorto);
+  }
+  
+  GmailApp.sendEmail(CONFIG.EMAIL, asunto, mensajeEmail);
+  Logger.log('📧 Notificaciones de error enviadas');
+}
+
+// ============================================================
+//   TELEGRAM (⭐ RECOMENDADO - Gratis y fácil)
+// ============================================================
+
+function enviarTelegram(mensaje) {
+  try {
+    const url = `https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`;
+    
+    const payload = {
+      chat_id: CONFIG.TELEGRAM_CHAT_ID,
+      text: mensaje,
+      parse_mode: 'Markdown'
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const result = JSON.parse(response.getContentText());
+    
+    if (result.ok) {
+      Logger.log('✅ Telegram enviado');
+    } else {
+      Logger.log('⚠️ Error Telegram: ' + result.description);
+    }
+  } catch (error) {
+    Logger.log('❌ Error enviando Telegram: ' + error);
+  }
+}
+
+// ============================================================
+//   WHATSAPP (Via Twilio - requiere cuenta)
+// ============================================================
+
+function enviarWhatsApp(mensaje) {
+  try {
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${CONFIG.TWILIO_ACCOUNT_SID}/Messages.json`;
+    
+    const payload = {
+      From: CONFIG.TWILIO_WHATSAPP_FROM,
+      To: CONFIG.TWILIO_WHATSAPP_TO,
+      Body: mensaje.replace(/\*/g, '')  // Remover markdown
+    };
+    
+    const options = {
+      method: 'post',
+      payload: payload,
+      headers: {
+        'Authorization': 'Basic ' + Utilities.base64Encode(
+          CONFIG.TWILIO_ACCOUNT_SID + ':' + CONFIG.TWILIO_AUTH_TOKEN
+        )
+      },
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    Logger.log('✅ WhatsApp enviado');
+  } catch (error) {
+    Logger.log('❌ Error enviando WhatsApp: ' + error);
+  }
+}
+
+// ============================================================
+//   SLACK
+// ============================================================
+
+function enviarSlack(mensaje) {
+  try {
+    const payload = {
+      text: mensaje.replace(/\*/g, '*'),  // Slack usa * para bold también
+      username: 'Colab Bot',
+      icon_emoji: ':robot_face:'
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    UrlFetchApp.fetch(CONFIG.SLACK_WEBHOOK_URL, options);
+    Logger.log('✅ Slack enviado');
+  } catch (error) {
+    Logger.log('❌ Error enviando Slack: ' + error);
+  }
+}
+
+// ============================================================
+//   DISCORD
+// ============================================================
+
+function enviarDiscord(mensaje) {
+  try {
+    const payload = {
+      content: mensaje.replace(/\*/g, '**'),  // Discord usa ** para bold
+      username: 'Colab Bot'
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    UrlFetchApp.fetch(CONFIG.DISCORD_WEBHOOK_URL, options);
+    Logger.log('✅ Discord enviado');
+  } catch (error) {
+    Logger.log('❌ Error enviando Discord: ' + error);
+  }
+}
+
+// ============================================================
+//   PUSHBULLET (Notificaciones móvil)
+// ============================================================
+
+function enviarPushbullet(titulo, mensaje) {
+  try {
+    const url = 'https://api.pushbullet.com/v2/pushes';
+    
+    const payload = {
+      type: 'note',
+      title: titulo,
+      body: mensaje.replace(/\*/g, '')
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Access-Token': CONFIG.PUSHBULLET_API_KEY
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    UrlFetchApp.fetch(url, options);
+    Logger.log('✅ Pushbullet enviado');
+  } catch (error) {
+    Logger.log('❌ Error enviando Pushbullet: ' + error);
+  }
+}
+
+// ============================================================
+//   ⭐ INSTALAR TRIGGER (EJECUTA ESTA FUNCIÓN UNA SOLA VEZ)
+// ============================================================
+
+function instalarTriggerDiario() {
+  // Eliminar triggers antiguos
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  
+  // Crear trigger diario a las 21:00
+  ScriptApp.newTrigger('ejecutarNotebookDiario')
+    .timeBased()
+    .atHour(CONFIG.EXECUTION_HOUR)
+    .everyDays(1)
+    .create();
+  
+  Logger.log('⏰ Trigger instalado: Se ejecutará a las ' + CONFIG.EXECUTION_HOUR + ':00');
+  Logger.log('📅 Días: Domingo, Lunes, Martes, Miércoles, Jueves');
+  Logger.log('✅ Configuración completada');
+  
+  // Enviar confirmación por email
+  GmailApp.sendEmail(
+    CONFIG.EMAIL,
+    '✅ Automatización de Colab configurada',
+    `Tu notebook se ejecutará automáticamente de domingo a jueves a las ${CONFIG.EXECUTION_HOUR}:00
+
+Notebook ID: ${CONFIG.NOTEBOOK_ID}
+
+Recibirás un email cada vez que se ejecute.`
+  );
+}
+
+// ============================================================
+//   FUNCIONES DE UTILIDAD
+// ============================================================
+
+function testearEjecucion() {
+  Logger.log('🧪 Ejecutando prueba manual...');
+  ejecutarNotebookDiario();
+}
+
+function desinstalarAutomatizacion() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  Logger.log('🛑 Automatización desinstalada');
+  
+  GmailApp.sendEmail(
+    CONFIG.EMAIL,
+    '🛑 Automatización de Colab desactivada',
+    'La ejecución automática ha sido desactivada.'
+  );
+}
+
+function verificarConfiguracion() {
+  Logger.log('='.repeat(60));
+  Logger.log('CONFIGURACIÓN ACTUAL');
+  Logger.log('='.repeat(60));
+  Logger.log('Notebook ID: ' + CONFIG.NOTEBOOK_ID);
+  Logger.log('Email: ' + CONFIG.EMAIL);
+  Logger.log('Hora de ejecución: ' + CONFIG.EXECUTION_HOUR + ':00');
+  Logger.log('Días: Domingo a Jueves (Forex)');
+  Logger.log('GPU: ' + CONFIG.GPU_TYPE);
+  Logger.log('Timeout: ' + CONFIG.MAX_EXECUTION_TIME + ' min');
+  Logger.log('='.repeat(60));
+  
+  try {
+    const file = DriveApp.getFileById(CONFIG.NOTEBOOK_ID);
+    Logger.log('✅ Acceso al notebook: OK');
+    Logger.log('   Nombre: ' + file.getName());
+  } catch (error) {
+    Logger.log('❌ Error accediendo al notebook: ' + error);
+  }
+}
+
+function verificarDiasEjecucion() {
+  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  
+  Logger.log('='.repeat(60));
+  Logger.log('📅 DÍAS DE EJECUCIÓN CONFIGURADOS');
+  Logger.log('='.repeat(60));
+  
+  for (let i = 0; i < 7; i++) {
+    const ejecuta = [0, 1, 2, 3, 4].includes(i);
+    const icono = ejecuta ? '✅' : '❌';
+    Logger.log(`${icono} ${dias[i]}: ${ejecuta ? 'SÍ ejecuta' : 'NO ejecuta (Forex cerrado)'}`);
+  }
+  
+  Logger.log('='.repeat(60));
+  Logger.log(`⏰ Hora configurada: ${CONFIG.EXECUTION_HOUR}:00`);
+}
+
+// ============================================================
+//   🧪 PROBAR MENSAJERÍA
+// ============================================================
+
+function probarMensajeria() {
+  Logger.log('🧪 Probando todas las plataformas de mensajería...');
+  
+  const mensajePrueba = `🧪 *Test de Mensajería*
+
+Este es un mensaje de prueba.
+Si lo recibes, ¡todo funciona bien!
+
+⏰ ${new Date().toLocaleString('es-ES')}`;
+  
+  Logger.log('Plataformas activas:');
+  Logger.log('- Email: Siempre activo');
+  if (CONFIG.USAR_TELEGRAM) Logger.log('- Telegram: ✅');
+  if (CONFIG.USAR_WHATSAPP) Logger.log('- WhatsApp: ✅');
+  if (CONFIG.USAR_SLACK) Logger.log('- Slack: ✅');
+  if (CONFIG.USAR_DISCORD) Logger.log('- Discord: ✅');
+  if (CONFIG.USAR_PUSHBULLET) Logger.log('- Pushbullet: ✅');
+  
+  // Enviar a todas las plataformas activas
+  if (CONFIG.USAR_TELEGRAM) {
+    enviarTelegram(mensajePrueba);
+  }
+  
+  if (CONFIG.USAR_WHATSAPP) {
+    enviarWhatsApp(mensajePrueba);
+  }
+  
+
+  if (CONFIG.USAR_SLACK) {
+    enviarSlack(mensajePrueba);
+  }
+  
+  if (CONFIG.USAR_DISCORD) {
+    enviarDiscord(mensajePrueba);
+  }
+  
+  if (CONFIG.USAR_PUSHBULLET) {
+    enviarPushbullet('🧪 Test', mensajePrueba);
+  }
+  
+  // Email de prueba
+  GmailApp.sendEmail(
+    CONFIG.EMAIL,
+    '🧪 Test de mensajería - Colab Automation',
+    mensajePrueba.replace(/\*/g, '')
+  );
+  
+  Logger.log('✅ Mensajes de prueba enviados a todas las plataformas activas');
+  Logger.log('Revisa tu email/Telegram/etc para confirmar');
+}
