@@ -4,8 +4,8 @@ import json
 import datetime
 import joblib
 
-MODEL_PATH = "models/pytorch/eurusd_lstm_pytorch.onnx"
-SCALER_PATH = "models/config/eurusd_scaler.pkl"
+MODEL_PATH = "models/pytorch/eurusd_lstm_daily.onnx"
+SCALER_PATH = "models/scalers/eurusd_scaler_daily.pkl"
 
 # cargar scaler
 scaler = joblib.load(SCALER_PATH)
