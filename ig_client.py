@@ -4,63 +4,47 @@ import requests
 BASE = "https://demo-api.ig.com/gateway/deal"
 
 API_KEY = os.environ["API_KEY"]
-USERNAME = os.environ["USUARIO"]
-PASSWORD = os.environ["PASSWORD"]
+U = os.environ["USUARIO"]
+P = os.environ["PASSWORD"]
 
-session = requests.Session()
-HEADERS = None
-
+s = requests.Session()
+HEADERS = {}
 
 def login():
     global HEADERS
 
-    r = session.post(
+    r = s.post(
         f"{BASE}/session",
         headers={
             "X-IG-API-KEY": API_KEY,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Version": "2",
+            "Content-Type": "application/json"
         },
         json={
-            "identifier": USERNAME,
-            "password": PASSWORD,
-        },
-        timeout=10,
+            "identifier": U,
+            "password": P
+        }
     )
 
-    if r.status_code != 200:
-        raise Exception(f"IG login failed: {r.status_code} {r.text}")
-
+    # IG devuelve headers en minúsculas en GitHub Actions
     headers = {k.lower(): v for k, v in r.headers.items()}
 
     cst = headers.get("cst")
     token = headers.get("x-security-token")
 
     if not cst or not token:
-        raise Exception(f"IG login failed, headers: {headers}")
+        raise Exception(f"IG login failed. Headers received: {headers}")
 
     HEADERS = {
         "X-IG-API-KEY": API_KEY,
         "CST": cst,
         "X-SECURITY-TOKEN": token,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Version": "2",
+        "Content-Type": "application/json"
     }
 
-
-def ensure_login():
-    if HEADERS is None:
-        login()
-
-
 def get_positions():
-    ensure_login()
-    r = session.get(f"{BASE}/positions", headers=HEADERS)
-    r.raise_for_status()
-    return r.json()
-
+    if not HEADERS:
+        login()
+    return s.get(f"{BASE}/positions", headers=HEADERS).json()
 
 def has_position(epic):
     return any(
@@ -68,10 +52,10 @@ def has_position(epic):
         for p in get_positions().get("positions", [])
     )
 
-
 def open_trade(epic, direction, size):
-    ensure_login()
-    r = session.post(
+    if not HEADERS:
+        login()
+    return s.post(
         f"{BASE}/positions/otc",
         headers=HEADERS,
         json={
@@ -79,19 +63,16 @@ def open_trade(epic, direction, size):
             "direction": direction,
             "size": size,
             "orderType": "MARKET",
-            "forceOpen": True,
-        },
-    )
-    r.raise_for_status()
-    return r.json()
-
+            "forceOpen": True
+        }
+    ).json()
 
 def close_trade(deal_id):
-    ensure_login()
-    r = session.delete(
+    if not HEADERS:
+        login()
+    return s.request(
+        "DELETE",
         f"{BASE}/positions/otc",
         headers=HEADERS,
-        json={"dealId": deal_id},
-    )
-    r.raise_for_status()
-    return r.json()
+        json={"dealId": deal_id}
+    ).json()
