@@ -1,0 +1,554 @@
+// ============================================================
+//   SUBIR MODELOS DE GOOGLE DRIVE A GITHUB AUTOMÁTICAMENTE
+// ============================================================
+
+// 🔑 CONFIGURACIÓN GITHUB
+const GITHUB_CONFIG = {
+  // Obtén tu token en: https://github.com/settings/tokens
+  // Permisos necesarios: repo (todos)
+  //GITHUB_TOKEN: '',
+  
+  // Tu usuario y repositorio
+  GITHUB_USER: 'jsgaston82',
+  GITHUB_REPO: 'IG-Trading',
+  
+  // Rama donde subir (main o master)
+  BRANCH: 'main',
+  
+  // Email para commits
+  COMMIT_EMAIL: 'jsgaston82@gmail.com',
+  COMMIT_NAME: 'Colab Bot'
+
+};
+
+const TELEGRAM_CONFIG = {
+  BOT_TOKEN: '8502620685:AAGnHy3x5iC5ACP91hYEnJ-yrl4_7oUUAdk',
+  CHAT_ID: '5825443798'
+};
+
+
+const DRIVE_FOLDER_ID = '1iNG2CE1-zdorfiOhi2hjWtkxf65hZi9p';
+
+// 📁 ARCHIVOS A SUBIR DESDE DRIVE
+const ARCHIVOS_DRIVE = [
+  {
+    nombre: 'eurusd_lstm_daily.onnx',
+    rutaGithub: 'models/pytorch/eurusd_lstm_daily.onnx',
+    descripcion: 'Modelo PyTorch ONNX'
+  },
+  {
+    nombre: 'eurusd_lstm_daily.pth',
+    rutaGithub: 'models/tensorflow/eurusd_lstm_daily.pth',
+    descripcion: 'Modelo TensorFlow ONNX'
+  },
+  {
+    nombre: 'eurusd_scaler_daily.pkl',
+    rutaGithub: 'models/scalers/eurusd_scaler_daily.pkl',
+    descripcion: 'Scaler MinMax'
+  },
+  {
+    nombre: 'eurusd_model_config_daily.json',
+    rutaGithub: 'models/config/eurusd_model_config_daily.json',
+    descripcion: 'Configuración del modelo'
+  },
+  {
+    nombre: 'training_results.png',
+    rutaGithub: 'results/training_results.png',
+    descripcion: 'Gráficas de entrenamiento'
+  },
+  {
+    nombre: 'EURUSD_1d_data.csv',
+    rutaGithub: 'data/EURUSD_1d_data.csv',
+    descripcion: 'Dataset actualizado'
+  }
+];
+
+
+function enviarTelegram(mensaje) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_CONFIG.BOT_TOKEN}/sendMessage`;
+  
+  const payload = {
+    chat_id: TELEGRAM_CONFIG.CHAT_ID,
+    text: mensaje,
+    parse_mode: 'Markdown'
+  };
+
+  UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+}
+
+
+// ============================================================
+//   FUNCIÓN PRINCIPAL - SUBIR A GITHUB
+// ============================================================
+
+function subirModelosAGitHub() {
+  Logger.log('📦 Iniciando subida a GitHub...');
+
+  if (!estaEnHorarioForex()) {
+  Logger.log('⏸ Fuera de horario Forex. No se ejecuta.');
+  return;
+}
+  
+  const fecha = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+  const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  let archivosSubidos = 0;
+  let errores = [];
+  
+  try {
+    // Buscar archivos en Drive
+    const carpetaDrive = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    Logger.log(`📁 Carpeta Drive: ${carpetaDrive.getName()}`);
+    
+    // Subir cada archivo
+    for (const archivoConfig of ARCHIVOS_DRIVE) {
+      try {
+        Logger.log(`\n📤 Subiendo: ${archivoConfig.nombre}...`);
+        
+        // Buscar archivo en Drive
+        const archivos = carpetaDrive.getFilesByName(archivoConfig.nombre);
+        
+        if (!archivos.hasNext()) {
+          Logger.log(`  ⚠️ No encontrado en Drive`);
+          errores.push(`${archivoConfig.nombre}: No encontrado`);
+          continue;
+        }
+        
+        const archivo = archivos.next();
+        const contenido = archivo.getBlob().getBytes();
+        const base64Content = Utilities.base64Encode(contenido);
+        
+        // Subir a GitHub
+        const resultado = subirArchivoAGitHub(
+          archivoConfig.rutaGithub,
+          base64Content,
+          `🤖 Auto-update: ${archivoConfig.descripcion} (${timestamp})`,
+          archivoConfig.nombre
+        );
+        
+        if (resultado.success) {
+          archivosSubidos++;
+          Logger.log(`  ✅ Subido exitosamente`);
+        } else {
+          errores.push(`${archivoConfig.nombre}: ${resultado.error}`);
+          Logger.log(`  ❌ Error: ${resultado.error}`);
+        }
+        
+        // Pausa para evitar rate limiting
+        Utilities.sleep(1000);
+        
+      } catch (error) {
+        errores.push(`${archivoConfig.nombre}: ${error.toString()}`);
+        Logger.log(`  ❌ Error: ${error}`);
+      }
+    }
+    
+    // Crear README automático
+    crearReadmeAutomatico(timestamp);
+    
+    // Resumen
+    Logger.log('\n' + '='.repeat(60));
+    Logger.log(`📊 RESUMEN`);
+    Logger.log('='.repeat(60));
+    Logger.log(`✅ Archivos subidos: ${archivosSubidos}/${ARCHIVOS_DRIVE.length}`);
+    Logger.log(`❌ Errores: ${errores.length}`);
+    Logger.log(`📅 Fecha: ${fecha}`);
+    Logger.log('='.repeat(60));
+    
+    // Enviar notificación
+    enviarNotificacionGitHub(archivosSubidos, errores, fecha);
+    
+  } catch (error) {
+    Logger.log(`❌ Error general: ${error}`);
+    enviarNotificacionErrorGitHub(error);
+  }
+}
+
+// ============================================================
+//   SUBIR ARCHIVO A GITHUB (API REST)
+// ============================================================
+
+function subirArchivoAGitHub(ruta, contenidoBase64, mensajeCommit, nombreArchivo) {
+  try {
+    const url = `https://api.github.com/repos/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}/contents/${ruta}`;
+    
+    // Primero, verificar si el archivo existe (para obtener SHA)
+    let sha = null;
+    try {
+      const checkOptions = {
+        method: 'get',
+        headers: {
+          'Authorization': `token ${GITHUB_CONFIG.GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        muteHttpExceptions: true
+      };
+      
+      const checkResponse = UrlFetchApp.fetch(url, checkOptions);
+      if (checkResponse.getResponseCode() === 200) {
+        const existingFile = JSON.parse(checkResponse.getContentText());
+        sha = existingFile.sha;
+        Logger.log(`  📝 Actualizando archivo existente (SHA: ${sha.substring(0, 7)}...)`);
+      }
+    } catch (e) {
+      Logger.log(`  ✨ Creando nuevo archivo`);
+    }
+    
+    // Preparar payload
+    const payload = {
+      message: mensajeCommit,
+      content: contenidoBase64,
+      branch: GITHUB_CONFIG.BRANCH,
+      committer: {
+        name: GITHUB_CONFIG.COMMIT_NAME,
+        email: GITHUB_CONFIG.COMMIT_EMAIL
+      }
+    };
+    
+    // Si existe, añadir SHA para actualizar
+    if (sha) {
+      payload.sha = sha;
+    }
+    
+    // Subir archivo
+    const options = {
+      method: 'put',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': `token ${GITHUB_CONFIG.GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const responseCode = response.getResponseCode();
+    
+    if (responseCode === 200 || responseCode === 201) {
+      const result = JSON.parse(response.getContentText());
+      return {
+        success: true,
+        sha: result.content.sha,
+        url: result.content.html_url
+      };
+    } else {
+      const errorMsg = response.getContentText();
+      return {
+        success: false,
+        error: `HTTP ${responseCode}: ${errorMsg.substring(0, 100)}`
+      };
+    }
+    
+  } catch (error) {
+    return {
+      success: false,
+      error: error.toString()
+    };
+  }
+}
+
+// ============================================================
+//   CREAR README AUTOMÁTICO
+// ============================================================
+
+function crearReadmeAutomatico(timestamp) {
+  Logger.log('\n📝 Creando README...');
+  
+  const readme = `# 🤖 Forex LSTM Models - Auto-updated
+
+![Last Update](https://img.shields.io/badge/Last%20Update-${timestamp}-blue)
+![Status](https://img.shields.io/badge/Status-Active-green)
+
+## 📊 Modelo EUR/USD LSTM
+
+Modelos LSTM para predicción de precios EUR/USD, entrenados con datos históricos de 1 hora.
+
+### 📁 Estructura del Repositorio
+
+\`\`\`
+forex-models/
+├── models/
+│   ├── pytorch/
+│   │   └── eurusd_lstm_pytorch.onnx      # Modelo PyTorch (formato ONNX)
+│   ├── tensorflow/
+│   │   └── eurusd_lstm_tf2onnx.onnx      # Modelo TensorFlow (formato ONNX)
+│   ├── scalers/
+│   │   └── eurusd_scaler_improved.pkl    # Scaler MinMaxScaler
+│   └── config/
+│       └── eurusd_model_config_improved.json  # Configuración del modelo
+├── data/
+│   └── EURUSD_1h_data.csv                # Dataset actualizado (10k+ registros)
+└── results/
+    └── training_results.png              # Gráficas de entrenamiento
+\`\`\`
+
+### 🔄 Actualización Automática
+
+Este repositorio se actualiza automáticamente:
+- **Frecuencia:** Domingo a Jueves, 21:00 CET
+- **Método:** Google Apps Script + Colab
+- **Última actualización:** ${timestamp}
+
+### 📈 Características del Modelo
+
+- **Arquitectura:** LSTM mejorado (3 capas, 256 unidades)
+- **Features:** Open, High, Low, Close
+- **Secuencia:** 60 períodos (60 horas)
+- **Datos:** EUR/USD 1h desde ${new Date().getFullYear() - 2}
+- **Formato:** ONNX (compatible con múltiples frameworks)
+
+### 🚀 Uso del Modelo
+
+#### Python con ONNX Runtime
+
+\`\`\`python
+import onnxruntime as ort
+import numpy as np
+
+# Cargar modelo
+session = ort.InferenceSession('models/pytorch/eurusd_lstm_pytorch.onnx')
+
+# Preparar input (60 períodos, 4 features)
+input_data = np.random.randn(1, 60, 4).astype(np.float32)
+
+# Predicción
+outputs = session.run(None, {'input': input_data})
+prediction = outputs[0]
+\`\`\`
+
+### 📊 Métricas de Entrenamiento
+
+Ver \`results/training_results.png\` para gráficas detalladas.
+
+### 📝 Licencia
+
+MIT License - Uso libre para fines educativos y comerciales.
+
+### 🤝 Contribuciones
+
+Este repositorio es auto-generado. Para cambios en el modelo, contacta al mantenedor.
+
+---
+
+**🤖 Auto-generado por Colab Automation Script**  
+**📅 Última actualización:** ${new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}
+`;
+  
+  const contenidoBase64 = Utilities.base64Encode(readme);
+  
+  const resultado = subirArchivoAGitHub(
+    'README.md',
+    contenidoBase64,
+    `📝 Auto-update README (${timestamp})`,
+    'README.md'
+  );
+  
+  if (resultado.success) {
+    Logger.log('  ✅ README creado/actualizado');
+  } else {
+    Logger.log(`  ⚠️ Error en README: ${resultado.error}`);
+  }
+}
+
+// ============================================================
+//   NOTIFICACIONES
+// ============================================================
+
+function enviarNotificacionGitHub(archivosSubidos, errores, fecha) {
+  const emoji = errores.length === 0 ? '✅' : '⚠️';
+  const estado = errores.length === 0 ? 'ÉXITO' : 'COMPLETADO CON ERRORES';
+  
+  const asunto = `${emoji} Modelos subidos a GitHub`;
+  
+  let cuerpoEmail = `
+Subida automática a GitHub
+
+📊 Resultado: ${estado}
+✅ Archivos subidos: ${archivosSubidos}/${ARCHIVOS_DRIVE.length}
+📅 Fecha: ${fecha}
+
+🔗 Repositorio: https://github.com/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}
+
+📁 Archivos:
+`;
+
+  ARCHIVOS_DRIVE.forEach(archivo => {
+    cuerpoEmail += `- ${archivo.nombre}\n`;
+  });
+  
+  if (errores.length > 0) {
+    cuerpoEmail += `\n❌ Errores:\n`;
+    errores.forEach(error => {
+      cuerpoEmail += `- ${error}\n`;
+    });
+  }
+  
+  cuerpoEmail += `\n---
+Automatización via Google Apps Script
+`;
+  
+  GmailApp.sendEmail('jsgaston82@gmail.com', asunto, cuerpoEmail);
+  
+  // Telegram si está configurado
+  if (typeof CONFIG !== 'undefined' && CONFIG.USAR_TELEGRAM) {
+    const mensajeTelegram = `${emoji} *GitHub Sync*
+
+📦 ${archivosSubidos}/${ARCHIVOS_DRIVE.length} archivos
+📅 ${fecha}
+
+🔗 github.com/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}`;
+    
+    enviarTelegram(mensajeTelegram);
+  }
+  
+  Logger.log('📧 Notificaciones enviadas');
+
+const mensajeTelegram = `
+📦 *GitHub Sync FOREX_MODELS*
+
+✅ ${archivosSubidos}/${ARCHIVOS_DRIVE.length} archivos
+❌ Errores: ${errores.length}
+📅 ${fecha}
+
+🔗 https://github.com/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}
+`;
+
+enviarTelegram(mensajeTelegram);
+
+
+
+
+}
+
+function enviarNotificacionErrorGitHub(error) {
+  const asunto = '❌ Error subiendo a GitHub';
+  const cuerpo = `
+Error en subida automática a GitHub
+
+❌ Error: ${error.toString()}
+📅 Fecha: ${new Date().toLocaleString('es-ES')}
+
+Por favor, revisa la configuración:
+- Token de GitHub
+- Nombre de usuario y repositorio
+- Permisos del token
+
+---
+Automatización via Google Apps Script
+  `;
+  
+  GmailApp.sendEmail('jsgaston82@gmail.com', asunto, cuerpo);
+  Logger.log('📧 Notificación de error enviada');
+
+const mensajeTelegram = `
+📦 *GitHub Sync FOREX_MODELS*
+
+✅ ${archivosSubidos}/${ARCHIVOS_DRIVE.length} archivos
+❌ Errores: ${errores.length}
+📅 ${fecha}
+
+🔗 https://github.com/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}
+`;
+
+enviarTelegram(mensajeTelegram);
+
+
+}
+
+
+function borrarTodosLosTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+  Logger.log('🧹 Todos los triggers eliminados');
+}
+
+
+
+
+
+// ============================================================
+//   CONFIGURACIÓN DE TRIGGER PARA GITHUB
+// ============================================================
+function instalarTriggerUnico() {
+  borrarTodosLosTriggers();
+
+  ScriptApp.newTrigger('subirModelosAGitHub')
+    .timeBased()
+    .everyMinutes(30)
+    .create();
+
+  enviarTelegram('⏰ Trigger único instalado (cada 30 min)');
+}
+
+function estaEnHorarioForex() {
+  const ahora = new Date();
+  const zona = 'Europe/Madrid';
+  const hora = Number(Utilities.formatDate(ahora, zona, 'H'));
+  const dia = Utilities.formatDate(ahora, zona, 'u'); // 1=lun ... 7=dom
+
+  // Forex: domingo 20:00 → viernes 22:00
+  if (dia == 7 && hora < 23) return false; // domingo antes de 23
+  if (dia == 5 && hora >= 23) return false; // viernes después de 22
+  if (dia == 6) return false; // sábado
+
+  // Ventana diaria 20:00 → 02:00
+  if (hora >= 20 || hora < 5) return true;
+
+  return false;
+}
+
+
+// ============================================================
+//   FUNCIONES DE UTILIDAD
+// ============================================================
+
+function probarSubidaGitHub() {
+  Logger.log('🧪 Probando subida a GitHub...');
+  subirModelosAGitHub();
+}
+
+function verificarConfigGitHub() {
+  Logger.log('='.repeat(60));
+  Logger.log('CONFIGURACIÓN GITHUB');
+  Logger.log('='.repeat(60));
+  Logger.log('Usuario: ' + GITHUB_CONFIG.GITHUB_USER);
+  Logger.log('Repositorio: ' + GITHUB_CONFIG.GITHUB_REPO);
+  Logger.log('Rama: ' + GITHUB_CONFIG.BRANCH);
+  Logger.log('Token: ' + (GITHUB_CONFIG.GITHUB_TOKEN ? 'Configurado ✓' : 'NO configurado ✗'));
+  Logger.log('Archivos a subir: ' + ARCHIVOS_DRIVE.length);
+  Logger.log('='.repeat(60));
+  
+  // Verificar token
+  if (GITHUB_CONFIG.GITHUB_TOKEN && GITHUB_CONFIG.GITHUB_TOKEN !== 'ghp_TU_TOKEN_AQUI') {
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}`;
+      const options = {
+        method: 'get',
+        headers: {
+          'Authorization': `token ${GITHUB_CONFIG.GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        muteHttpExceptions: true
+      };
+      
+      const response = UrlFetchApp.fetch(url, options);
+      if (response.getResponseCode() === 200) {
+        const repo = JSON.parse(response.getContentText());
+        Logger.log('✅ Acceso al repositorio: OK');
+        Logger.log('   Nombre completo: ' + repo.full_name);
+        Logger.log('   Privado: ' + (repo.private ? 'Sí' : 'No'));
+      } else {
+        Logger.log('❌ Error accediendo al repositorio: ' + response.getResponseCode());
+      }
+    } catch (error) {
+      Logger.log('❌ Error: ' + error);
+    }
+  } else {
+    Logger.log('⚠️ Configura el token de GitHub primero');
+  }
+}
