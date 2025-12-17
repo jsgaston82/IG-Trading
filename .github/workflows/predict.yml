@@ -14,4 +14,4 @@ jobs:
       - uses: actions/checkout@v3
       - run: pip install joblib
       - run: pip install onnxruntime numpy joblib
-      - run: python predict_6h.py
+      #- run: python predict_6h.py
