@@ -1,0 +1,16 @@
+name: Predict 6H
+
+on:
+  schedule:
+    - cron: "0 23 * * 0"
+    - cron: "0 */6 * * 1-4"
+    - cron: "0 */6 * * 5"
+  workflow_dispatch:
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install joblib
+      - run: python predict_6h.py
