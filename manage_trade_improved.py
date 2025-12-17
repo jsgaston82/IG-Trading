@@ -10,3 +10,11 @@ for p in positions.get("positions", []):
     if pnl < -50:
         close_trade(deal)
         send(f"🔴 Orden cerrada por pérdida {deal}")
+
+from atr_utils import compute_atr_pips
+
+atr = compute_atr_pips(multiplier=1.0)
+
+if current_drawdown_pips > atr:
+    close_trade(deal_id)
+
