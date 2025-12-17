@@ -1,0 +1,20 @@
+name: Open Trade
+
+on:
+  schedule:
+    - cron: "5 23 * * 0"
+    - cron: "5 */6 * * 1-4"
+    - cron: "5 */6 * * 5"
+  workflow_dispatch:
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install requests
+      - run: python open_trade.py
+        env:
+          IG_API_KEY: ${{ secrets.API_KEY }}
+          IG_USERNAME: ${{ secrets.USUARIO }}
+          IG_PASSWORD: ${{ secrets.PASSWORD }}
