@@ -27,41 +27,51 @@ const TELEGRAM_CONFIG = {
 };
 
 
-const DRIVE_FOLDER_ID = '1iNG2CE1-zdorfiOhi2hjWtkxf65hZi9p';
+const DRIVE_FOLDERS = {
+  MODELS: '1iNG2CE1-zdorfiOhi2hjWtkxf65hZi9p', // FOREX_MODELS
+  ROOT: 'root' // Mi unidad (main)
+};
 
 // 📁 ARCHIVOS A SUBIR DESDE DRIVE
 const ARCHIVOS_DRIVE = [
   {
     nombre: 'eurusd_lstm_daily.onnx',
     rutaGithub: 'models/pytorch/eurusd_lstm_daily.onnx',
-    descripcion: 'Modelo PyTorch ONNX'
+    descripcion: 'Modelo PyTorch ONNX',
+    origen: 'MODELS'
   },
   {
     nombre: 'eurusd_lstm_daily.pth',
     rutaGithub: 'models/tensorflow/eurusd_lstm_daily.pth',
-    descripcion: 'Modelo TensorFlow ONNX'
+    descripcion: 'Modelo TensorFlow',
+    origen: 'MODELS'
   },
   {
     nombre: 'eurusd_scaler_daily.pkl',
     rutaGithub: 'models/scalers/eurusd_scaler_daily.pkl',
-    descripcion: 'Scaler MinMax'
+    descripcion: 'Scaler',
+    origen: 'MODELS'
   },
   {
     nombre: 'eurusd_model_config_daily.json',
     rutaGithub: 'models/config/eurusd_model_config_daily.json',
-    descripcion: 'Configuración del modelo'
+    descripcion: 'Config modelo',
+    origen: 'MODELS'
   },
   {
     nombre: 'training_results.png',
     rutaGithub: 'results/training_results.png',
-    descripcion: 'Gráficas de entrenamiento'
+    descripcion: 'Resultados entrenamiento',
+    origen: 'ROOT'
   },
   {
     nombre: 'EURUSD_1d_data.csv',
     rutaGithub: 'data/EURUSD_1d_data.csv',
-    descripcion: 'Dataset actualizado'
+    descripcion: 'Dataset diario',
+    origen: 'ROOT'
   }
 ];
+
 
 
 function enviarTelegram(mensaje) {
@@ -89,85 +99,78 @@ function enviarTelegram(mensaje) {
 function subirModelosAGitHub() {
   Logger.log('📦 Iniciando subida a GitHub...');
 
+  // ⏸️ Filtro horario Forex
   if (!estaEnHorarioForex()) {
-  Logger.log('⏸ Fuera de horario Forex. No se ejecuta.');
-  return;
-}
-  
+    Logger.log('⏸ Fuera de horario Forex. No se ejecuta.');
+    return;
+  }
+
   const fecha = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
-  const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  
+  const timestamp = new Date().toISOString().split('T')[0];
+
+  // ⚠️ DECLARAR FUERA DEL TRY
   let archivosSubidos = 0;
   let errores = [];
-  
+
   try {
-    // Buscar archivos en Drive
-    const carpetaDrive = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-    Logger.log(`📁 Carpeta Drive: ${carpetaDrive.getName()}`);
-    
-    // Subir cada archivo
+    // 📁 Carpetas Drive
+    const carpetas = {
+      MODELS: DriveApp.getFolderById(DRIVE_FOLDERS.MODELS),
+      ROOT: DriveApp.getRootFolder()
+    };
+
+    // 🔁 Procesar archivos
     for (const archivoConfig of ARCHIVOS_DRIVE) {
       try {
-        Logger.log(`\n📤 Subiendo: ${archivoConfig.nombre}...`);
-        
-        // Buscar archivo en Drive
-        const archivos = carpetaDrive.getFilesByName(archivoConfig.nombre);
-        
+        Logger.log(`📤 Subiendo: ${archivoConfig.nombre}`);
+
+        const carpetaOrigen = carpetas[archivoConfig.origen];
+        if (!carpetaOrigen) {
+          throw new Error(`Carpeta origen no definida: ${archivoConfig.origen}`);
+        }
+
+        const archivos = carpetaOrigen.getFilesByName(archivoConfig.nombre);
         if (!archivos.hasNext()) {
-          Logger.log(`  ⚠️ No encontrado en Drive`);
           errores.push(`${archivoConfig.nombre}: No encontrado`);
+          Logger.log(`⚠️ No encontrado en Drive`);
           continue;
         }
-        
+
         const archivo = archivos.next();
-        const contenido = archivo.getBlob().getBytes();
-        const base64Content = Utilities.base64Encode(contenido);
-        
-        // Subir a GitHub
+        const contenido = Utilities.base64Encode(archivo.getBlob().getBytes());
+
         const resultado = subirArchivoAGitHub(
           archivoConfig.rutaGithub,
-          base64Content,
+          contenido,
           `🤖 Auto-update: ${archivoConfig.descripcion} (${timestamp})`,
           archivoConfig.nombre
         );
-        
+
         if (resultado.success) {
           archivosSubidos++;
-          Logger.log(`  ✅ Subido exitosamente`);
+          Logger.log('✅ Subido correctamente');
         } else {
           errores.push(`${archivoConfig.nombre}: ${resultado.error}`);
-          Logger.log(`  ❌ Error: ${resultado.error}`);
+          Logger.log(`❌ Error GitHub: ${resultado.error}`);
         }
-        
-        // Pausa para evitar rate limiting
-        Utilities.sleep(1000);
-        
-      } catch (error) {
-        errores.push(`${archivoConfig.nombre}: ${error.toString()}`);
-        Logger.log(`  ❌ Error: ${error}`);
+
+        Utilities.sleep(800);
+
+      } catch (e) {
+        errores.push(`${archivoConfig.nombre}: ${e.message}`);
+        Logger.log(`❌ Error archivo: ${e.message}`);
       }
     }
-    
-    // Crear README automático
+
     crearReadmeAutomatico(timestamp);
-    
-    // Resumen
-    Logger.log('\n' + '='.repeat(60));
-    Logger.log(`📊 RESUMEN`);
-    Logger.log('='.repeat(60));
-    Logger.log(`✅ Archivos subidos: ${archivosSubidos}/${ARCHIVOS_DRIVE.length}`);
-    Logger.log(`❌ Errores: ${errores.length}`);
-    Logger.log(`📅 Fecha: ${fecha}`);
-    Logger.log('='.repeat(60));
-    
-    // Enviar notificación
     enviarNotificacionGitHub(archivosSubidos, errores, fecha);
-    
+
   } catch (error) {
-    Logger.log(`❌ Error general: ${error}`);
-    enviarNotificacionErrorGitHub(error);
+    Logger.log(`❌ Error general: ${error.message}`);
+    enviarNotificacionErrorGitHub(error, archivosSubidos);
   }
 }
+
 
 // ============================================================
 //   SUBIR ARCHIVO A GITHUB (API REST)
@@ -426,40 +429,22 @@ enviarTelegram(mensajeTelegram);
 
 }
 
-function enviarNotificacionErrorGitHub(error) {
-  const asunto = '❌ Error subiendo a GitHub';
-  const cuerpo = `
-Error en subida automática a GitHub
+function enviarNotificacionErrorGitHub(error, archivosSubidos = 0) {
+  const mensaje = `
+❌ *Error en GitHub Sync*
 
-❌ Error: ${error.toString()}
-📅 Fecha: ${new Date().toLocaleString('es-ES')}
+📦 Archivos subidos: ${archivosSubidos}
+🧨 Error:
+${error.message || error}
 
-Por favor, revisa la configuración:
-- Token de GitHub
-- Nombre de usuario y repositorio
-- Permisos del token
-
----
-Automatización via Google Apps Script
-  `;
-  
-  GmailApp.sendEmail('jsgaston82@gmail.com', asunto, cuerpo);
-  Logger.log('📧 Notificación de error enviada');
-
-const mensajeTelegram = `
-📦 *GitHub Sync FOREX_MODELS*
-
-✅ ${archivosSubidos}/${ARCHIVOS_DRIVE.length} archivos
-❌ Errores: ${errores.length}
-📅 ${fecha}
-
-🔗 https://github.com/${GITHUB_CONFIG.GITHUB_USER}/${GITHUB_CONFIG.GITHUB_REPO}
+📅 ${new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}
 `;
 
-enviarTelegram(mensajeTelegram);
-
-
+  enviarTelegram(mensaje);
+  Logger.log('📲 Notificación de error enviada a Telegram');
 }
+
+
 
 
 function borrarTodosLosTriggers() {
