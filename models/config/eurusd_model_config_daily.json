@@ -1,0 +1,20 @@
+{
+  "timeframe": "DAILY",
+  "sequence_length": 60,
+  "features": [
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "hidden_size": 256,
+  "num_layers": 3,
+  "metrics": {
+    "MAE": 0.005435923476819087,
+    "MSE": 5.0901761036560484e-05,
+    "RMSE": 0.007134547009906129,
+    "R2": 0.9713306142541424,
+    "MAPE": 0.49436291073859
+  },
+  "notes": "Modelo entrenado con datos diarios. Secuencia de 60 d\u00edas = 2 meses"
+}
