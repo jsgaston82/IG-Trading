@@ -1,0 +1,7 @@
+name: Manage Trade
+
+on:
+  schedule:
+    - cron: "0,15,30,45 23 * * 0"
+    - cron: "0,15,30,45 * * 1-4"
+    - cron: "0,15,30,45 0-20 * * 5"
