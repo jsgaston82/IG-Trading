@@ -2,7 +2,7 @@ name: Collect Data
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # cada 15 min (más estable que 5)
+    - cron: "*/5 * * * *"   # cada 15 min (más estable que 5)
   workflow_dispatch:
 
 permissions:
