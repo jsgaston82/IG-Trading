@@ -5,7 +5,19 @@ API_KEY=os.environ["API_KEY"]
 U=os.environ["USUARIO"]
 P=os.environ["PASSWORD"]
 s=requests.Session()
-h={}
+cst = r.headers.get("CST") or r.headers.get("cst")
+token = r.headers.get("X-SECURITY-TOKEN") or r.headers.get("x-security-token")
+
+if not cst or not token:
+    raise Exception(f"IG login failed, headers: {dict(r.headers)}")
+
+h = {
+    "X-IG-API-KEY": API_KEY,
+    "CST": cst,
+    "X-SECURITY-TOKEN": token,
+    "Content-Type": "application/json"
+}
+
 def login():
     global h
     r=s.post(f"{BASE}/session",headers={"X-IG-API-KEY":API_KEY,"Content-Type":"application/json"},
