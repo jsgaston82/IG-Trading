@@ -30,5 +30,11 @@ size = compute(
     tp_pips = stop_pips * 2  # RR 1:2,
 )
 
-r = open_trade(EPIC, sig["direction"], size)
+r = open_trade(
+    epic=EPIC,
+    direction=direction,
+    size=size,
+    stop_level=stop_pips,
+    limit_level=tp_pips
+)
 send(f"✅ Orden abierta {sig['direction']} size={size}\n{r}")
