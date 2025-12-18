@@ -1,9 +1,9 @@
 {
-  "total_trades": 14,
+  "total_trades": 16,
   "wins": 5,
-  "losses": 9,
-  "winrate_pct": 35.71,
-  "net_pips": -40.0,
+  "losses": 11,
+  "winrate_pct": 31.25,
+  "net_pips": -60.0,
   "tp_pips": 10,
   "sl_pips": 10
 }
