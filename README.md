@@ -1,6 +1,6 @@
 # ? Forex LSTM Models - Auto-updated
 
-![Last Update](https://img.shields.io/badge/Last%20Update-2025-12-18-blue)
+![Last Update](https://img.shields.io/badge/Last%20Update-2025-12-19-blue)
 ![Status](https://img.shields.io/badge/Status-Active-green)
 
 ## ? Modelo EUR/USD LSTM
@@ -31,7 +31,7 @@ forex-models/
 Este repositorio se actualiza autom?ticamente:
 - **Frecuencia:** Domingo a Jueves, 21:00 CET
 - **M?todo:** Google Apps Script + Colab
-- **?ltima actualizaci?n:** 2025-12-18
+- **?ltima actualizaci?n:** 2025-12-19
 
 ### ? Caracter?sticas del Modelo
 
@@ -75,4 +75,4 @@ Este repositorio es auto-generado. Para cambios en el modelo, contacta al manten
 ---
 
 **? Auto-generado por Colab Automation Script**  
-**? ?ltima actualizaci?n:** 19/12/2025, 0:51:17
+**? ?ltima actualizaci?n:** 19/12/2025, 1:51:12
