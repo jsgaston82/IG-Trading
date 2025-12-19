@@ -1,10 +1,10 @@
 {
-  "timestamp": "2025-12-18T23:45:00+00:00",
+  "timestamp": "2025-12-18T23:55:00+00:00",
   "price": 1.17288,
   "trend": "NEUTRAL",
-  "rsi_prev": 42.85,
-  "rsi_now": 57.15,
+  "rsi_prev": 57.15,
+  "rsi_now": 66.67,
   "signal": "NONE",
   "direction": null,
-  "updated_utc": "2025-12-19T03:54:20.774536"
+  "updated_utc": "2025-12-19T04:57:50.605769"
 }
