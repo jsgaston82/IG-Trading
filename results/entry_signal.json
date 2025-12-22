@@ -1,10 +1,10 @@
 {
-  "timestamp": "2025-12-22T20:55:00+00:00",
-  "price": 1.17606,
-  "trend": "BEARISH",
-  "rsi_prev": 75.01,
-  "rsi_now": 66.66,
-  "signal": "ENTRY",
-  "direction": "SHORT",
-  "updated_utc": "2025-12-22T21:34:32.278461"
+  "timestamp": "2025-12-22T21:30:00+00:00",
+  "price": 1.17633,
+  "trend": "BULLISH",
+  "rsi_prev": 63.63,
+  "rsi_now": 60.0,
+  "signal": "NONE",
+  "direction": null,
+  "updated_utc": "2025-12-22T21:47:08.605595"
 }
